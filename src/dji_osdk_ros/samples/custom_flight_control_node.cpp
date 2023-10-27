@@ -49,9 +49,19 @@ ros::ServiceClient task_control_client;
 ros::ServiceClient set_joystick_mode_client;
 ros::ServiceClient joystick_action_client;
 
+DJI::OSDK::float32_t x = 0.0;   /*!< LOCAL X COORDINATE (initialized as 0.0)*/
+DJI::OSDK::float32_t y = 0.0;   /*!< LOCAL Y COORDINATE (initialized as 0.0)*/
+DJI::OSDK::float32_t z = 0.0;   /*!< LOCAL Z COORDINATE (initialized as 0.0)*/
+DJI::OSDK::float32_t yaw = 0.0; /*!< LOCAL YAW COORDINATE (initialized as 0.0)*/
+
 bool moveByPosOffset(FlightTaskControl& task,const JoystickCommand &offsetDesired,
                      float posThresholdInM = 0.8,
                      float yawThresholdInDeg = 1.0);
+
+bool moveToPos(FlightTaskControl& task,const JoystickCommand &localPosDesired,
+                     float posThresholdInM = 0.8,
+                     float yawThresholdInDeg = 1.0);
+
 
 // TODO: getTime gets the GPS time, which is used by filterTime to decide to move to waypoints
 // void getTime(void);
@@ -98,13 +108,22 @@ int main(int argc, char** argv)
   std::cout << "| [c] Monitored Takeoff + Position Control + Force Landing Avoid Ground    |" << std::endl;
   std::cout << "| [d] Monitored Takeoff + Velocity Control + Landing                       |" << std::endl;
   // TODO: Write command for take-off + input position control by offset + landing
-  // std::cout << "| [e] Monitored Takeoff + Input Position Control By Offset + Landing       |" << std::endl;
+  std::cout << "| [e] Monitored Takeoff + Input Position Control By Offset + Landing       |" << std::endl;
   // TODO: Write command for take-off + input position control by local coordinates + landing
-  // std::cout << "| [f] Monitored Takeoff + Input Position Control By Local Coord + Landing  |" << std::endl;
+  std::cout << "| [f] Monitored Takeoff + Input Position Control By Local Coord + Landing  |" << std::endl;
 
   std::cout << "Please select command: ";
   char inputChar;
   std::cin >> inputChar;
+
+  DJI::OSDK::float32_t xRequested = 0.0;   /*!< Control with respect to the x axis of the JI::OSDK::Control::HorizontalCoordinate.*/
+  DJI::OSDK::float32_t yRequested = 0.0;   /*!< Control with respect to the y axis of the DJI::OSDK::Control::HorizontalCoordinate.*/
+  DJI::OSDK::float32_t zRequested = 0.0;   /*!< Control with respect to the z axis, up is positive. */
+  DJI::OSDK::float32_t yawRequested = 0.0; /*!< Yaw position/velocity control w.r.t. the ground frame.*/
+
+  float posThreshInM = 0.8;
+  float yawThreshInDeg = 1.0;
+
   EmergencyBrake emergency_brake;
   FlightTaskControl control_task;
   ObtainControlAuthority obtainCtrlAuthority;
@@ -155,11 +174,11 @@ int main(int argc, char** argv)
           ros::Duration(2.0).sleep();
 
           ROS_INFO_STREAM("Move by position offset request sending ...");
-          moveByPosOffset(control_task, {0.0, 6.0, 6.0, 30.0}, 0.8, 1);
+          moveByPosOffset(control_task, {0.0, 2.0, 2.0, 30.0}, 0.8, 10);
           ROS_INFO_STREAM("Step 1 over!");
-          moveByPosOffset(control_task, {6.0, 0.0, -3, -30.0}, 0.8, 1);
+          moveByPosOffset(control_task, {2.0, 0.0, -1.0, -30.0}, 0.8, 10);
           ROS_INFO_STREAM("Step 2 over!");
-          moveByPosOffset(control_task, {-6.0, -6.0, 0.0, 0.0}, 0.8, 1);
+          moveByPosOffset(control_task, {-2.0, -2.0, 0.0, 0.0}, 0.8, 10);
           ROS_INFO_STREAM("Step 3 over!");
 
           control_task.request.task = FlightTaskControl::Request::TASK_LAND;
@@ -220,9 +239,9 @@ int main(int argc, char** argv)
 
           ROS_INFO_STREAM("Move by position offset request sending ...");
           ROS_INFO_STREAM("Move to higher altitude");
-          moveByPosOffset(control_task, {0.0, 0.0, 30.0, 0.0}, 0.8, 1);
+          moveByPosOffset(control_task, {0.0, 0.0, 3.0, 0.0}, 0.8, 1);
           ROS_INFO_STREAM("Move a short distance");
-          moveByPosOffset(control_task, {10.0, 0.0, 0.0, 0.0}, 0.8, 1);
+          moveByPosOffset(control_task, {3.0, 0.0, 0.0, 0.0}, 0.8, 1);
 
           ROS_INFO_STREAM("Set aircraft current position as new home location");
           SetCurrentAircraftLocAsHomePoint home_set_req;
@@ -246,7 +265,7 @@ int main(int argc, char** argv)
 
           ROS_INFO_STREAM("Set new go home altitude");
           SetGoHomeAltitude altitude_go_home;
-          altitude_go_home.request.altitude = 50;
+          altitude_go_home.request.altitude = 20;
           set_go_home_altitude_client.call(altitude_go_home);
           if(altitude_go_home.response.result == false)
           {
@@ -263,7 +282,7 @@ int main(int argc, char** argv)
           ROS_INFO("Current go home altitude is :%d m", current_go_home_altitude.response.altitude);
 
           ROS_INFO_STREAM("Move to another position");
-          moveByPosOffset(control_task, {50.0, 0.0, 0.0, 0.0} , 0.8, 1);
+          moveByPosOffset(control_task, {2.0, 0.0, 0.0, 0.0} , 0.8, 1);
 
           ROS_INFO_STREAM("Shut down Horizon_Collision-Avoidance-Enabled");
           horizon_avoid_req.request.enable = false;
@@ -346,16 +365,120 @@ int main(int argc, char** argv)
         }
         break;
       }
-    // TODO: Write command for take-off + input position control by offset + landing
-    // case 'e':
-    //   {
+    case 'e':
+      {
+        /* TAKEOFF */
+        control_task.request.task = FlightTaskControl::Request::TASK_TAKEOFF;
+        ROS_INFO_STREAM("Takeoff request sending ...");
+        task_control_client.call(control_task);
+        if(control_task.response.result == false)
+        {
+          ROS_ERROR_STREAM("Takeoff task failed");
+          break;
+        }
+        else if (control_task.response.result == true)
+        {
+          ROS_INFO_STREAM("Takeoff task successful");
+          ros::Duration(2.0).sleep();
 
-    //   }
-    // TODO: Write command for take-off + input position control by local coordinates + landing
-    // case 'f':
-    //   {
+          /* Ask for position and yaw threshold at beginning of mission. */
+          std::cout << "Please enter position threshold [meters]: ";
+          std::cin >> posThreshInM;
+          std::cout << "Please enter yaw threshold [degrees]: ";
+          std::cin >> yawThreshInDeg;
+          /* Ask after each iteration if drone should keep flying and ask for another waypoint. */
+          char keep_flying = 'y';
+          while (keep_flying == 'y')
+          {
+            /* Ask for new (x, y, z, yaw). */
+            std::cout << "Please enter x offset [meters]: ";
+            std::cin >> xRequested;
+            std::cout << "Please enter y offset [meters]: ";
+            std::cin >> yRequested;
+            std::cout << "Please enter z offset [meters]: ";
+            std::cin >> zRequested;
+            std::cout << "Please enter yaw offset [degrees]: ";
+            std::cin >> yawRequested;
 
-    //   }
+            /* MOVE TO OFFSET POSITION */
+            ROS_INFO_STREAM("Using moveByPosOffset to offset x = " << xRequested << ", y = " << yRequested << ", z = " << zRequested << ", yaw = " << yawRequested << " ...");
+            moveByPosOffset(control_task, {xRequested, yRequested, zRequested, yawRequested}, posThreshInM, yawThreshInDeg);
+            ROS_INFO_STREAM("moveByPosOffset complete!");
+
+            /* Ask if we should keep flying. */
+            std::cout << "Keep flying? (y/n) ";
+            std::cin >> keep_flying;
+          }
+          /* LANDING */
+          control_task.request.task = FlightTaskControl::Request::TASK_LAND;
+          ROS_INFO_STREAM("Landing request sending ...");
+          task_control_client.call(control_task);
+          if(control_task.response.result == true)
+          {
+            ROS_INFO_STREAM("Land task successful");
+            break;
+          }
+          ROS_INFO_STREAM("Land task failed.");
+          break;
+        }
+      }
+    case 'f':
+      {
+        /* TAKEOFF */
+        control_task.request.task = FlightTaskControl::Request::TASK_TAKEOFF;
+        ROS_INFO_STREAM("Takeoff request sending ...");
+        task_control_client.call(control_task);
+        if(control_task.response.result == false)
+        {
+          ROS_ERROR_STREAM("Takeoff task failed");
+          break;
+        }
+        else if (control_task.response.result == true)
+        {
+          ROS_INFO_STREAM("Takeoff task successful");
+          ros::Duration(2.0).sleep();
+
+          /* Ask for position and yaw threshold at beginning of mission. */
+          std::cout << "Please enter position threshold [meters]: ";
+          std::cin >> posThreshInM;
+          std::cout << "Please enter yaw threshold [degrees]: ";
+          std::cin >> yawThreshInDeg;
+          /* Ask after each iteration if drone should keep flying and ask for another waypoint. */
+          char keep_flying = 'y';
+          while (keep_flying == 'y')
+          {
+            /* Ask for new (x, y, z, yaw). */
+            std::cout << "Please enter x location [meters]: ";
+            std::cin >> xRequested;
+            std::cout << "Please enter y location [meters]: ";
+            std::cin >> yRequested;
+            std::cout << "Please enter z location [meters]: ";
+            std::cin >> zRequested;
+            std::cout << "Please enter yaw orientation [degrees]: ";
+            std::cin >> yawRequested;
+
+            /* MOVE TO NEW LOCAL POSITION */
+            ROS_INFO_STREAM("Using moveToPose to move to x = " << xRequested << ", y = " << yRequested << ", z = " << zRequested << ", yaw = " << yawRequested << " ...");
+            moveToPos(control_task, {xRequested, yRequested, zRequested, yawRequested}, posThreshInM, yawThreshInDeg);
+	    ROS_INFO_STREAM("moveToPose complete!");
+
+            /* Ask if we should keep flying. */
+            std::cout << "Keep flying? (y/n) ";
+            std::cin >> keep_flying;
+          }
+          /* LANDING */
+          control_task.request.task = FlightTaskControl::Request::TASK_LAND;
+          ROS_INFO_STREAM("Landing request sending ...");
+          task_control_client.call(control_task);
+          if(control_task.response.result == true)
+          {
+            ROS_INFO_STREAM("Land task successful");
+            break;
+          }
+          ROS_INFO_STREAM("Land task failed.");
+          break;
+        }
+      }
     default:
       break;
   }
@@ -381,6 +504,34 @@ bool moveByPosOffset(FlightTaskControl& task,const JoystickCommand &offsetDesire
 
   task_control_client.call(task);
   return task.response.result;
+}
+
+bool moveToPos(FlightTaskControl& task,const JoystickCommand &localPosDesired,
+                     float posThresholdInM,
+                     float yawThresholdInDeg)
+{
+  /* Call moveByOffset, using the difference between current pose and desired pose. */
+  DJI::OSDK::float32_t x_delta = x - localPosDesired.x;
+  DJI::OSDK::float32_t y_delta = y - localPosDesired.y;
+  DJI::OSDK::float32_t z_delta = z - localPosDesired.z;
+  DJI::OSDK::float32_t yaw_delta = yaw - localPosDesired.yaw;
+
+  bool result = moveByPosOffset(task,
+                                {x_delta, y_delta, z_delta, yaw_delta},
+                                posThresholdInM,
+                                yawThresholdInDeg);
+  if (result)
+  {
+     x = localPosDesired.x;
+     y = localPosDesired.y;
+     z = localPosDesired.z;
+     yaw = localPosDesired.yaw;
+  }
+  // bool result  = moveByPosOffset(task,
+  //                 		 {x - localPosDesired.x, y - localPosDesired.y, z - localPosDesired.z, yaw - localPosDesired.yaw},
+  //                 		 posThresholdInM,
+  //                 		 yawThresholdInDeg);
+  return result;
 }
 
 void velocityAndYawRateCtrl(const JoystickCommand &offsetDesired, uint32_t timeMs)
