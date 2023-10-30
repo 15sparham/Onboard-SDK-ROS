@@ -42,6 +42,8 @@
 #include<dji_osdk_ros/SetJoystickMode.h>
 #include<dji_osdk_ros/JoystickAction.h>
 
+#include<math.h>
+
 //CODE
 using namespace dji_osdk_ros;
 
@@ -62,6 +64,8 @@ bool moveToPos(FlightTaskControl& task,const JoystickCommand &localPosDesired,
                      float posThresholdInM = 0.8,
                      float yawThresholdInDeg = 1.0);
 
+float32_t xyzMax = 20;
+float32_t yawMax = 360;
 
 // TODO: getTime gets the GPS time, which is used by filterTime to decide to move to waypoints
 // void getTime(void);
@@ -381,6 +385,33 @@ int main(int argc, char** argv)
           ROS_INFO_STREAM("Takeoff task successful");
           ros::Duration(2.0).sleep();
 
+          ROS_INFO_STREAM("turn on Horizon_Collision-Avoidance-Enabled");
+          SetAvoidEnable horizon_avoid_req;
+          horizon_avoid_req.request.enable = true;
+          enable_horizon_avoid_client.call(horizon_avoid_req);
+          if(horizon_avoid_req.response.result == false)
+          {
+            ROS_ERROR_STREAM("Enable Horizon Avoid FAILED");
+          }
+
+          ROS_INFO_STREAM("turn on Upwards-Collision-Avoidance-Enabled");
+          SetAvoidEnable upward_avoid_req;
+          upward_avoid_req.request.enable = true;
+          enable_upward_avoid_client.call(upward_avoid_req);
+          if(upward_avoid_req.response.result == false)
+          {
+            ROS_ERROR_STREAM("Enable Upward Avoid FAILED");
+          }
+
+          GetAvoidEnable getAvoidEnable;
+          get_avoid_enable_client.call(getAvoidEnable);
+          if (getAvoidEnable.response.result)
+          {
+            ROS_INFO("get horizon avoid enable status:%d, get upwards avoid enable status:%d",
+                     getAvoidEnable.response.horizon_avoid_enable_status,
+                     getAvoidEnable.response.upwards_avoid_enable_status);
+          }
+
           /* Ask for position and yaw threshold at beginning of mission. */
           std::cout << "Please enter position threshold [meters]: ";
           std::cin >> posThreshInM;
@@ -400,15 +431,46 @@ int main(int argc, char** argv)
             std::cout << "Please enter yaw offset [degrees]: ";
             std::cin >> yawRequested;
 
-            /* MOVE TO OFFSET POSITION */
-            ROS_INFO_STREAM("Using moveByPosOffset to offset x = " << xRequested << ", y = " << yRequested << ", z = " << zRequested << ", yaw = " << yawRequested << " ...");
-            moveByPosOffset(control_task, {xRequested, yRequested, zRequested, yawRequested}, posThreshInM, yawThreshInDeg);
-            ROS_INFO_STREAM("moveByPosOffset complete!");
-
+            if (fabs(xRequested) <= xyzMax && fabs(yRequested) <= xyzMax && fabs(zRequested) <= xyzMax && yawRequested <= yawMax)
+            {
+              /* MOVE TO OFFSET POSITION */
+              ROS_INFO_STREAM("Using moveByPosOffset to offset x = " << xRequested << ", y = " << yRequested << ", z = " << zRequested << ", yaw = " << yawRequested << " ...");
+              moveByPosOffset(control_task, {xRequested, yRequested, zRequested, yawRequested}, posThreshInM, yawThreshInDeg);
+              ROS_INFO_STREAM("moveByPosOffset complete!");
+            }
+            else
+            {
+              std::cout << "Invalid request received. Exceeded xyzMax=" << xyzMax << "or yawMax=" << yawMax << ".";
+            }
             /* Ask if we should keep flying. */
             std::cout << "Keep flying? (y/n) ";
             std::cin >> keep_flying;
           }
+
+          ROS_INFO_STREAM("Shut down Horizon_Collision-Avoidance-Enabled");
+          horizon_avoid_req.request.enable = false;
+          enable_horizon_avoid_client.call(horizon_avoid_req);
+          if(horizon_avoid_req.response.result == false)
+          {
+            ROS_ERROR_STREAM("Disable Horizon Avoid FAILED");
+          }
+
+          ROS_INFO_STREAM("Shut down Upwards-Collision-Avoidance-Enabled");
+          upward_avoid_req.request.enable = false;
+          enable_upward_avoid_client.call(upward_avoid_req);
+          if(upward_avoid_req.response.result == false)
+          {
+            ROS_ERROR_STREAM("Enable Upward Avoid FAILED");
+          }
+
+          get_avoid_enable_client.call(getAvoidEnable);
+          if (getAvoidEnable.response.result)
+          {
+            ROS_INFO("get horizon avoid enable status:%d, get upwards avoid enable status:%d",
+                     getAvoidEnable.response.horizon_avoid_enable_status,
+                     getAvoidEnable.response.upwards_avoid_enable_status);
+          }
+
           /* LANDING */
           control_task.request.task = FlightTaskControl::Request::TASK_LAND;
           ROS_INFO_STREAM("Landing request sending ...");
@@ -438,6 +500,33 @@ int main(int argc, char** argv)
           ROS_INFO_STREAM("Takeoff task successful");
           ros::Duration(2.0).sleep();
 
+          ROS_INFO_STREAM("turn on Horizon_Collision-Avoidance-Enabled");
+          SetAvoidEnable horizon_avoid_req;
+          horizon_avoid_req.request.enable = true;
+          enable_horizon_avoid_client.call(horizon_avoid_req);
+          if(horizon_avoid_req.response.result == false)
+          {
+            ROS_ERROR_STREAM("Enable Horizon Avoid FAILED");
+          }
+
+          ROS_INFO_STREAM("turn on Upwards-Collision-Avoidance-Enabled");
+          SetAvoidEnable upward_avoid_req;
+          upward_avoid_req.request.enable = true;
+          enable_upward_avoid_client.call(upward_avoid_req);
+          if(upward_avoid_req.response.result == false)
+          {
+            ROS_ERROR_STREAM("Enable Upward Avoid FAILED");
+          }
+
+          GetAvoidEnable getAvoidEnable;
+          get_avoid_enable_client.call(getAvoidEnable);
+          if (getAvoidEnable.response.result)
+          {
+            ROS_INFO("get horizon avoid enable status:%d, get upwards avoid enable status:%d",
+                     getAvoidEnable.response.horizon_avoid_enable_status,
+                     getAvoidEnable.response.upwards_avoid_enable_status);
+          }
+
           /* Ask for position and yaw threshold at beginning of mission. */
           std::cout << "Please enter position threshold [meters]: ";
           std::cin >> posThreshInM;
@@ -457,15 +546,47 @@ int main(int argc, char** argv)
             std::cout << "Please enter yaw orientation [degrees]: ";
             std::cin >> yawRequested;
 
-            /* MOVE TO NEW LOCAL POSITION */
-            ROS_INFO_STREAM("Using moveToPose to move to x = " << xRequested << ", y = " << yRequested << ", z = " << zRequested << ", yaw = " << yawRequested << " ...");
-            moveToPos(control_task, {xRequested, yRequested, zRequested, yawRequested}, posThreshInM, yawThreshInDeg);
-	    ROS_INFO_STREAM("moveToPose complete!");
+            if (fabs(xRequested) <= xyzMax && fabs(yRequested) <= xyzMax && fabs(zRequested) <= xyzMax && yawRequested <= yawMax)
+            {
+              /* MOVE TO NEW LOCAL POSITION */
+              ROS_INFO_STREAM("Using moveToPose to move to x = " << xRequested << ", y = " << yRequested << ", z = " << zRequested << ", yaw = " << yawRequested << " ...");
+              moveToPos(control_task, {xRequested, yRequested, zRequested, yawRequested}, posThreshInM, yawThreshInDeg);
+              ROS_INFO_STREAM("moveToPose complete!");
+            }
+            else
+            {
+              std::cout << "Invalid request received. Exceeded xyzMax=" << xyzMax << "or yawMax=" << yawMax << ".";
+            }
 
             /* Ask if we should keep flying. */
             std::cout << "Keep flying? (y/n) ";
             std::cin >> keep_flying;
           }
+
+          ROS_INFO_STREAM("Shut down Horizon_Collision-Avoidance-Enabled");
+          horizon_avoid_req.request.enable = false;
+          enable_horizon_avoid_client.call(horizon_avoid_req);
+          if(horizon_avoid_req.response.result == false)
+          {
+            ROS_ERROR_STREAM("Disable Horizon Avoid FAILED");
+          }
+
+          ROS_INFO_STREAM("Shut down Upwards-Collision-Avoidance-Enabled");
+          upward_avoid_req.request.enable = false;
+          enable_upward_avoid_client.call(upward_avoid_req);
+          if(upward_avoid_req.response.result == false)
+          {
+            ROS_ERROR_STREAM("Enable Upward Avoid FAILED");
+          }
+
+          get_avoid_enable_client.call(getAvoidEnable);
+          if (getAvoidEnable.response.result)
+          {
+            ROS_INFO("get horizon avoid enable status:%d, get upwards avoid enable status:%d",
+                     getAvoidEnable.response.horizon_avoid_enable_status,
+                     getAvoidEnable.response.upwards_avoid_enable_status);
+          }
+
           /* LANDING */
           control_task.request.task = FlightTaskControl::Request::TASK_LAND;
           ROS_INFO_STREAM("Landing request sending ...");
