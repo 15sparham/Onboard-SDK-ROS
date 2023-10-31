@@ -43,6 +43,7 @@
 #include<dji_osdk_ros/JoystickAction.h>
 
 #include<math.h>
+#include<dji_osdk_ros/waypointV2_node.h>
 
 //CODE
 using namespace dji_osdk_ros;
@@ -56,6 +57,12 @@ DJI::OSDK::float32_t y = 0.0;   /*!< LOCAL Y COORDINATE (initialized as 0.0)*/
 DJI::OSDK::float32_t z = 0.0;   /*!< LOCAL Z COORDINATE (initialized as 0.0)*/
 DJI::OSDK::float32_t yaw = 0.0; /*!< LOCAL YAW COORDINATE (initialized as 0.0)*/
 
+
+void gpsPositionSubCallback(const sensor_msgs::NavSatFix::ConstPtr& gpsPosition)
+{
+  gps_position_ = *gpsPosition;
+}
+
 bool moveByPosOffset(FlightTaskControl& task,const JoystickCommand &offsetDesired,
                      float posThresholdInM = 0.8,
                      float yawThresholdInDeg = 1.0);
@@ -64,8 +71,8 @@ bool moveToPos(FlightTaskControl& task,const JoystickCommand &localPosDesired,
                      float posThresholdInM = 0.8,
                      float yawThresholdInDeg = 1.0);
 
-float32_t xyzMax = 20;
-float32_t yawMax = 360;
+DJI::OSDK::float32_t xyzMax = 20;
+DJI::OSDK::float32_t yawMax = 360;
 
 // TODO: getTime gets the GPS time, which is used by filterTime to decide to move to waypoints
 // void getTime(void);
@@ -91,6 +98,9 @@ int main(int argc, char** argv)
 {
   ros::init(argc, argv, "flight_control_node");
   ros::NodeHandle nh;
+
+  ros::Subscriber gpsPositionSub = nh.subscribe("dji_osdk_ros/gps_position", 10, &gpsPositionSubCallback);
+
   task_control_client = nh.serviceClient<FlightTaskControl>("/flight_task_control");
 
   auto set_go_home_altitude_client = nh.serviceClient<SetGoHomeAltitude>("/set_go_home_altitude");
@@ -107,14 +117,9 @@ int main(int argc, char** argv)
   set_joystick_mode_client = nh.serviceClient<SetJoystickMode>("set_joystick_mode");
   joystick_action_client   = nh.serviceClient<JoystickAction>("joystick_action");
   std::cout << "| Available commands:                                                      |" << std::endl;
-  std::cout << "| [a] Monitored Takeoff + Landing                                          |" << std::endl;
-  std::cout << "| [b] Monitored Takeoff + Position Control + Landing                       |" << std::endl;
-  std::cout << "| [c] Monitored Takeoff + Position Control + Force Landing Avoid Ground    |" << std::endl;
-  std::cout << "| [d] Monitored Takeoff + Velocity Control + Landing                       |" << std::endl;
-  // TODO: Write command for take-off + input position control by offset + landing
-  std::cout << "| [e] Monitored Takeoff + Input Position Control By Offset + Landing       |" << std::endl;
-  // TODO: Write command for take-off + input position control by local coordinates + landing
-  std::cout << "| [f] Monitored Takeoff + Input Position Control By Local Coord + Landing  |" << std::endl;
+  std::cout << "| [a] Monitored Takeoff + Input Position Control By Offset + Landing       |" << std::endl;
+  std::cout << "| [b] Monitored Takeoff + Input Position Control By Local Coord + Landing  |" << std::endl;
+  std::cout << "| [c] GPS location printout                                                |" << std::endl;
 
   std::cout << "Please select command: ";
   char inputChar;
@@ -138,238 +143,6 @@ int main(int argc, char** argv)
   switch (inputChar)
   {
     case 'a':
-      {
-        control_task.request.task = FlightTaskControl::Request::TASK_TAKEOFF;
-        ROS_INFO_STREAM("Takeoff request sending ...");
-        task_control_client.call(control_task);
-        if(control_task.response.result == true)
-        {
-          ROS_INFO_STREAM("Takeoff task successful");
-          ros::Duration(2.0).sleep();
-
-          ROS_INFO_STREAM("Land request sending ...");
-          control_task.request.task = FlightTaskControl::Request::TASK_LAND;
-          task_control_client.call(control_task);
-          if(control_task.response.result == true)
-          {
-            ROS_INFO_STREAM("Land task successful");
-            break;
-          }
-          ROS_INFO_STREAM("Land task failed.");
-          break;
-        }
-        ROS_ERROR_STREAM("Takeoff task failed");
-        break;
-      }
-    case 'b':
-      {
-        control_task.request.task = FlightTaskControl::Request::TASK_TAKEOFF;
-        ROS_INFO_STREAM("Takeoff request sending ...");
-        task_control_client.call(control_task);
-        if(control_task.response.result == false)
-        {
-          ROS_ERROR_STREAM("Takeoff task failed");
-          break;
-        }
-
-        if(control_task.response.result == true)
-        {
-          ROS_INFO_STREAM("Takeoff task successful");
-          ros::Duration(2.0).sleep();
-
-          ROS_INFO_STREAM("Move by position offset request sending ...");
-          moveByPosOffset(control_task, {0.0, 2.0, 2.0, 30.0}, 0.8, 10);
-          ROS_INFO_STREAM("Step 1 over!");
-          moveByPosOffset(control_task, {2.0, 0.0, -1.0, -30.0}, 0.8, 10);
-          ROS_INFO_STREAM("Step 2 over!");
-          moveByPosOffset(control_task, {-2.0, -2.0, 0.0, 0.0}, 0.8, 10);
-          ROS_INFO_STREAM("Step 3 over!");
-
-          control_task.request.task = FlightTaskControl::Request::TASK_LAND;
-          ROS_INFO_STREAM("Landing request sending ...");
-          task_control_client.call(control_task);
-          if(control_task.response.result == true)
-          {
-            ROS_INFO_STREAM("Land task successful");
-            break;
-          }
-          ROS_INFO_STREAM("Land task failed.");
-          break;
-        }
-        break;
-      }
-    case 'c':
-      {
-        control_task.request.task = FlightTaskControl::Request::TASK_TAKEOFF;
-        ROS_INFO_STREAM("Takeoff request sending ...");
-        task_control_client.call(control_task);
-        if(control_task.response.result == false)
-        {
-          ROS_ERROR_STREAM("Takeoff task failed");
-          break;
-        }
-
-        if (control_task.response.result == true)
-        {
-          ROS_INFO_STREAM("Takeoff task successful");
-          ros::Duration(2.0).sleep();
-
-          ROS_INFO_STREAM("turn on Horizon_Collision-Avoidance-Enabled");
-          SetAvoidEnable horizon_avoid_req;
-          horizon_avoid_req.request.enable = true;
-          enable_horizon_avoid_client.call(horizon_avoid_req);
-          if(horizon_avoid_req.response.result == false)
-          {
-            ROS_ERROR_STREAM("Enable Horizon Avoid FAILED");
-          }
-
-          ROS_INFO_STREAM("turn on Upwards-Collision-Avoidance-Enabled");
-          SetAvoidEnable upward_avoid_req;
-          upward_avoid_req.request.enable = true;
-          enable_upward_avoid_client.call(upward_avoid_req);
-          if(upward_avoid_req.response.result == false)
-          {
-            ROS_ERROR_STREAM("Enable Upward Avoid FAILED");
-          }
-
-          GetAvoidEnable getAvoidEnable;
-          get_avoid_enable_client.call(getAvoidEnable);
-          if (getAvoidEnable.response.result)
-          {
-            ROS_INFO("get horizon avoid enable status:%d, get upwards avoid enable status:%d",
-                     getAvoidEnable.response.horizon_avoid_enable_status,
-                     getAvoidEnable.response.upwards_avoid_enable_status);
-          }
-
-          ROS_INFO_STREAM("Move by position offset request sending ...");
-          ROS_INFO_STREAM("Move to higher altitude");
-          moveByPosOffset(control_task, {0.0, 0.0, 3.0, 0.0}, 0.8, 1);
-          ROS_INFO_STREAM("Move a short distance");
-          moveByPosOffset(control_task, {3.0, 0.0, 0.0, 0.0}, 0.8, 1);
-
-          ROS_INFO_STREAM("Set aircraft current position as new home location");
-          SetCurrentAircraftLocAsHomePoint home_set_req;
-          set_current_point_as_home_client.call(home_set_req);
-          if(home_set_req.response.result == false)
-          {
-            ROS_ERROR_STREAM("Set current position as Home, FAILED");
-            break;
-          }
-
-
-          ROS_INFO_STREAM("Get current go home altitude");
-          GetGoHomeAltitude current_go_home_altitude;
-          get_go_home_altitude_client.call(current_go_home_altitude);
-          if(current_go_home_altitude.response.result == false)
-          {
-            ROS_ERROR_STREAM("Get altitude for go home FAILED");
-            break;
-          }
-          ROS_INFO("Current go home altitude is :%d m", current_go_home_altitude.response.altitude);
-
-          ROS_INFO_STREAM("Set new go home altitude");
-          SetGoHomeAltitude altitude_go_home;
-          altitude_go_home.request.altitude = 20;
-          set_go_home_altitude_client.call(altitude_go_home);
-          if(altitude_go_home.response.result == false)
-          {
-            ROS_ERROR_STREAM("Set altitude for go home FAILED");
-            break;
-          }
-
-          get_go_home_altitude_client.call(current_go_home_altitude);
-          if(current_go_home_altitude.response.result == false)
-          {
-            ROS_ERROR_STREAM("Get altitude for go home FAILED");
-            break;
-          }
-          ROS_INFO("Current go home altitude is :%d m", current_go_home_altitude.response.altitude);
-
-          ROS_INFO_STREAM("Move to another position");
-          moveByPosOffset(control_task, {2.0, 0.0, 0.0, 0.0} , 0.8, 1);
-
-          ROS_INFO_STREAM("Shut down Horizon_Collision-Avoidance-Enabled");
-          horizon_avoid_req.request.enable = false;
-          enable_horizon_avoid_client.call(horizon_avoid_req);
-          if(horizon_avoid_req.response.result == false)
-          {
-            ROS_ERROR_STREAM("Disable Horizon Avoid FAILED");
-          }
-
-          ROS_INFO_STREAM("Shut down Upwards-Collision-Avoidance-Enabled");
-          upward_avoid_req.request.enable = false;
-          enable_upward_avoid_client.call(upward_avoid_req);
-          if(upward_avoid_req.response.result == false)
-          {
-            ROS_ERROR_STREAM("Enable Upward Avoid FAILED");
-          }
-
-          get_avoid_enable_client.call(getAvoidEnable);
-          if (getAvoidEnable.response.result)
-          {
-            ROS_INFO("get horizon avoid enable status:%d, get upwards avoid enable status:%d",
-                     getAvoidEnable.response.horizon_avoid_enable_status,
-                     getAvoidEnable.response.upwards_avoid_enable_status);
-          }
-
-          ROS_INFO_STREAM("Go home...");
-
-          control_task.request.task = FlightTaskControl::Request::TASK_GOHOME_AND_CONFIRM_LANDING;
-          task_control_client.call(control_task);
-          if(control_task.response.result == false)
-          {
-            ROS_ERROR_STREAM("GO HOME FAILED");
-          }
-          break;
-        }
-      }
-    case 'd':
-      {
-        control_task.request.task = FlightTaskControl::Request::TASK_TAKEOFF;
-        ROS_INFO_STREAM("Takeoff request sending ...");
-        task_control_client.call(control_task);
-        if(control_task.response.result == false)
-        {
-          ROS_ERROR_STREAM("Takeoff task failed");
-          break;
-        }
-
-        if(control_task.response.result == true)
-        {
-          ROS_INFO_STREAM("Takeoff task successful");
-          ros::Duration(2).sleep();
-
-          velocityAndYawRateCtrl( {0, 0, 5.0, 0}, 2000);
-          ROS_INFO_STREAM("Step 1 over!EmergencyBrake for 2s\n");
-          emergency_brake_client.call(emergency_brake);
-          ros::Duration(2).sleep();
-          velocityAndYawRateCtrl({-1.5, 2, 0, 0}, 2000);
-          ROS_INFO_STREAM("Step 2 over!EmergencyBrake for 2s\n");
-          emergency_brake_client.call(emergency_brake);
-          ros::Duration(2).sleep();
-          velocityAndYawRateCtrl({3, 0, 0, 0}, 2500);
-          ROS_INFO_STREAM("Step 3 over!EmergencyBrake for 2s\n");
-          emergency_brake_client.call(emergency_brake);
-          ros::Duration(2).sleep();
-          velocityAndYawRateCtrl({-1.6, -2, 0, 0}, 2200);
-          ROS_INFO_STREAM("Step 4 over!EmergencyBrake for 2s\n");
-          emergency_brake_client.call(emergency_brake);
-          ros::Duration(2).sleep();
-
-          control_task.request.task = FlightTaskControl::Request::TASK_LAND;
-          ROS_INFO_STREAM("Landing request sending ...");
-          task_control_client.call(control_task);
-          if(control_task.response.result == true)
-          {
-            ROS_INFO_STREAM("Land task successful");
-            break;
-          }
-          ROS_INFO_STREAM("Land task failed.");
-          break;
-        }
-        break;
-      }
-    case 'e':
       {
         /* TAKEOFF */
         control_task.request.task = FlightTaskControl::Request::TASK_TAKEOFF;
@@ -484,7 +257,7 @@ int main(int argc, char** argv)
           break;
         }
       }
-    case 'f':
+    case 'b':
       {
         /* TAKEOFF */
         control_task.request.task = FlightTaskControl::Request::TASK_TAKEOFF;
@@ -599,6 +372,44 @@ int main(int argc, char** argv)
           ROS_INFO_STREAM("Land task failed.");
           break;
         }
+      }
+    case 'c':
+      {
+        char keep_checking = 'y';
+        while (keep_checking == 'y')
+        {
+          std::cout << "gps_position_.latitude =" << gps_position_.latitude * C_PI / 180.0 << std::endl;
+          std::cout << "gps_position_.longitude =" << gps_position_.longitude * C_PI / 180.0 << std::endl;
+
+          /* Ask if we should keep checking. */
+          std::cout << "Keep checking? (y/n) ";
+          std::cin >> keep_checking;
+        }
+        // // Let's create a vector to store our waypoints in.
+        // std::vector<dji_osdk_ros::WaypointV2> waypointList;
+        // dji_osdk_ros::WaypointV2 startPoint;
+        // dji_osdk_ros::WaypointV2 waypointV2;
+
+        // startPoint.latitude  = gps_position_.latitude * C_PI / 180.0;
+        // startPoint.longitude = gps_position_.longitude * C_PI / 180.0;
+        // startPoint.relativeHeight = 15;
+        // setWaypointV2Defaults(startPoint);
+        // waypointList.push_back(startPoint);
+
+        // // Iterative algorithm
+        // for (int i = 0; i < polygonNum; i++) {
+        //   float32_t angle = i * 2 * M_PI / polygonNum;
+        //   setWaypointV2Defaults(waypointV2);
+        //   float32_t X = radius * cos(angle);
+        //   float32_t Y = radius * sin(angle);
+        //   waypointV2.latitude = Y/EARTH_RADIUS + startPoint.latitude;
+        //   waypointV2.longitude = X/(EARTH_RADIUS * cos(startPoint.latitude)) + startPoint.longitude;
+        //   waypointV2.relativeHeight = startPoint.relativeHeight ;
+        //   waypointList.push_back(waypointV2);
+        // }
+        // waypointList.push_back(startPoint);
+
+        // return waypointList;
       }
     default:
       break;

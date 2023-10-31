@@ -1619,11 +1619,11 @@ static T_OsdkOsalHandler osalHandler = {
     float yawDesiredInDeg = JoystickCommand.yaw;
 
     int responseTimeout = 1;
-    int timeoutInMilSec = 40000;
+    int timeoutInMilSec = 2000; // Used to be 40000, way too long
     int controlFreqInHz = 50;  // Hz
     int cycleTimeInMs = 1000 / controlFreqInHz;
     int outOfControlBoundsTimeLimit = 10 * cycleTimeInMs;    // 10 cycles
-    int withinControlBoundsTimeReqmt = 100 * cycleTimeInMs;  // 100 cycles
+    int withinControlBoundsTimeReqmt = 10 * cycleTimeInMs;  // Used to be 100 cycles, dropped to 10 cycles
     int elapsedTimeInMs = 0;
     int withinBoundsCounter = 0;
     int outOfBounds = 0;
@@ -1638,7 +1638,7 @@ static T_OsdkOsalHandler osalHandler = {
     {
       return false;
     }
-    sleep(1);
+    // sleep(1); // Don't think we need to sleep
 
     //! get origin position and relative height(from home point)of aircraft.
     Telemetry::TypeMap<TOPIC_GPS_FUSED>::type originGPSPosition =
