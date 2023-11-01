@@ -1602,6 +1602,113 @@ static T_OsdkOsalHandler osalHandler = {
     return sqrt(pow(v.x, 2) + pow(v.y, 2) + pow(v.z, 2));
   }
 
+  bool VehicleWrapper::moveToPosition(const Telemetry::GPSFused& desiredGPSPosition, float32_t& desiredHeight, float yawDesiredInDeg,
+                                      int timeout, float posThresholdInM, float yawThresholdInDeg)
+  {
+    if (!vehicle)
+    {
+      std::cout << "Vehicle is a null value!" << std::endl;
+      return false;
+    }
+
+    using namespace Telemetry;
+
+    int responseTimeout = 1;
+    int timeoutInMilSec = 2000; // Used to be 40000, way too long
+    int controlFreqInHz = 50;  // Hz
+    int cycleTimeInMs = 1000 / controlFreqInHz;
+    int outOfControlBoundsTimeLimit = 10 * cycleTimeInMs;    // 10 cycles
+    int withinControlBoundsTimeReqmt = 10 * cycleTimeInMs;  // Used to be 100 cycles, dropped to 10 cycles
+    int elapsedTimeInMs = 0;
+    int withinBoundsCounter = 0;
+    int outOfBounds = 0;
+    int brakeCounter = 0;
+    int speedFactor = 2;
+
+    /* now we need position-height broadcast to obtain the real-time altitude of the aircraft, 
+    * which is consistent with the altitude closed-loop data of flight control internal position control
+    * TO DO:the data will be replaced by new data subscription.
+    */
+    if (!startGlobalPositionBroadcast())
+    {
+      return false;
+    }
+    // sleep(1); // Don't think we need to sleep
+
+    //! get origin relative height(from home point)of aircraft.
+    Telemetry::GlobalPosition currentBroadcastGP = vehicle->broadcast->getGlobalPosition();
+    float32_t originHeightBaseHomepoint = currentBroadcastGP.height;
+    FlightController::JoystickMode joystickMode = {
+      FlightController::HorizontalLogic::HORIZONTAL_POSITION,
+      FlightController::VerticalLogic::VERTICAL_POSITION,
+      FlightController::YawLogic::YAW_ANGLE,
+      FlightController::HorizontalCoordinate::HORIZONTAL_GROUND,
+      FlightController::StableMode::STABLE_ENABLE,
+    };
+    vehicle->flightController->setJoystickMode(joystickMode);
+
+    while (elapsedTimeInMs < timeoutInMilSec) {
+      /* CURRENT POSITION + QUATERNION + HEIGHT */
+      Telemetry::TypeMap<TOPIC_GPS_FUSED>::type currentGPSPosition =
+          vehicle->subscribe->getValue<TOPIC_GPS_FUSED>();
+      Telemetry::TypeMap<TOPIC_QUATERNION>::type currentQuaternion =
+          vehicle->subscribe->getValue<TOPIC_QUATERNION>();
+      currentBroadcastGP = vehicle->broadcast->getGlobalPosition();
+      float yawInRad = quaternionToEulerAngle(currentQuaternion).z;
+      /******************************************/
+      //! get the vector between aircraft and desired point.
+
+      Vector3f offsetRemaining = localOffsetFromGpsAndFusedHeightOffset(currentGPSPosition, desiredGPSPosition,
+                                                                    currentBroadcastGP.height, desiredHeight);
+
+      Vector3f positionCommand = offsetRemaining;
+      horizCommandLimit(speedFactor, positionCommand.x, positionCommand.y);
+
+      FlightController::JoystickCommand joystickCommand = {
+          positionCommand.x, positionCommand.y,
+          desiredHeight + originHeightBaseHomepoint, yawDesiredInDeg};
+
+      vehicle->flightController->setJoystickCommand(joystickCommand);
+
+      vehicle->flightController->joystickAction();
+
+      if (vectorNorm(offsetRemaining) < posThresholdInM &&
+          std::fabs(yawInRad / DEG2RAD - yawDesiredInDeg) < yawThresholdInDeg) {
+        //! 1. We are within bounds; start incrementing our in-bound counter
+        withinBoundsCounter += cycleTimeInMs;
+      } else {
+        if (withinBoundsCounter != 0) {
+          //! 2. Start incrementing an out-of-bounds counter
+          outOfBounds += cycleTimeInMs;
+        }
+      }
+      //! 3. Reset withinBoundsCounter if necessary
+      if (outOfBounds > outOfControlBoundsTimeLimit) {
+        withinBoundsCounter = 0;
+        outOfBounds = 0;
+      }
+      //! 4. If within bounds, set flag and break
+      if (withinBoundsCounter >= withinControlBoundsTimeReqmt) {
+        break;
+      }
+      usleep(cycleTimeInMs * 1000);
+      elapsedTimeInMs += cycleTimeInMs;
+    }
+
+    while (brakeCounter < withinControlBoundsTimeReqmt) {
+      //! TODO: remove emergencyBrake
+      vehicle->flightController->emergencyBrakeAction();
+      usleep(cycleTimeInMs * 1000);
+      brakeCounter += cycleTimeInMs;
+    }
+
+    if (elapsedTimeInMs >= timeoutInMilSec) {
+      std::cout << "Task timeout!\n";
+      return false;
+    }
+    return true;
+  }
+
   bool VehicleWrapper::moveByPositionOffset(const JoystickCommand &JoystickCommand,int timeout,
                                             float posThresholdInM,float yawThresholdInDeg)
   {
@@ -1655,12 +1762,14 @@ static T_OsdkOsalHandler osalHandler = {
     vehicle->flightController->setJoystickMode(joystickMode);
 
     while (elapsedTimeInMs < timeoutInMilSec) {
+      /* CURRENT POSITION + QUATERNION + HEIGHT */
       Telemetry::TypeMap<TOPIC_GPS_FUSED>::type currentGPSPosition =
           vehicle->subscribe->getValue<TOPIC_GPS_FUSED>();
       Telemetry::TypeMap<TOPIC_QUATERNION>::type currentQuaternion =
           vehicle->subscribe->getValue<TOPIC_QUATERNION>();
       currentBroadcastGP = vehicle->broadcast->getGlobalPosition();
       float yawInRad = quaternionToEulerAngle(currentQuaternion).z;
+      /******************************************/
       //! get the vector between aircraft and origin point.
 
       Vector3f localOffset = localOffsetFromGpsAndFusedHeightOffset(currentGPSPosition, originGPSPosition,
