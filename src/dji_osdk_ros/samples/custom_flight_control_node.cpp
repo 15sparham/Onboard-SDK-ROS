@@ -44,6 +44,7 @@
 
 #include<math.h>
 #include<dji_osdk_ros/waypointV2_node.h>
+#include<dji_osdk_ros/vehicle_wrapper.h>
 
 //CODE
 using namespace dji_osdk_ros;
@@ -60,6 +61,7 @@ DJI::OSDK::float32_t yaw = 0.0; /*!< LOCAL YAW COORDINATE (initialized as 0.0)*/
 
 void gpsPositionSubCallback(const sensor_msgs::NavSatFix::ConstPtr& gpsPosition)
 {
+  // std::cout << "gpsPosition lat " << gpsPosition->latitude << ", long " << gpsPosition->longitude << " received.";
   gps_position_ = *gpsPosition;
 }
 
@@ -67,9 +69,9 @@ bool moveByPosOffset(FlightTaskControl& task,const JoystickCommand &offsetDesire
                      float posThresholdInM = 0.8,
                      float yawThresholdInDeg = 1.0);
 
-bool moveToPos(FlightTaskControl& task,const JoystickCommand &localPosDesired,
-                     float posThresholdInM = 0.8,
-                     float yawThresholdInDeg = 1.0);
+bool moveToPos(FlightTaskControl& task,const JoystickCommand &offsetDesired,
+               float posThresholdInM = 0.8,
+               float yawThresholdInDeg = 1.0);
 
 DJI::OSDK::float32_t xyzMax = 20;
 DJI::OSDK::float32_t yawMax = 360;
@@ -91,8 +93,6 @@ DJI::OSDK::float32_t yawMax = 360;
 
 // TODO: moveToPos commands drone to move somewhere
 // void moveToPos(void);
-
-void velocityAndYawRateCtrl(const JoystickCommand &offsetDesired, uint32_t timeMs);
 
 int main(int argc, char** argv)
 {
@@ -116,6 +116,7 @@ int main(int argc, char** argv)
 
   set_joystick_mode_client = nh.serviceClient<SetJoystickMode>("set_joystick_mode");
   joystick_action_client   = nh.serviceClient<JoystickAction>("joystick_action");
+
   std::cout << "| Available commands:                                                      |" << std::endl;
   std::cout << "| [a] Monitored Takeoff + Input Position Control By Offset + Landing       |" << std::endl;
   std::cout << "| [b] Monitored Takeoff + Input Position Control By Local Coord + Landing  |" << std::endl;
@@ -208,6 +209,7 @@ int main(int argc, char** argv)
             {
               /* MOVE TO OFFSET POSITION */
               ROS_INFO_STREAM("Using moveByPosOffset to offset x = " << xRequested << ", y = " << yRequested << ", z = " << zRequested << ", yaw = " << yawRequested << " ...");
+              // globalMoveByPoseOffset({xRequested, yRequested, zRequested, yawRequested}, 4, posThreshInM, yawThreshInDeg);
               moveByPosOffset(control_task, {xRequested, yRequested, zRequested, yawRequested}, posThreshInM, yawThreshInDeg);
               ROS_INFO_STREAM("moveByPosOffset complete!");
             }
@@ -309,27 +311,22 @@ int main(int argc, char** argv)
           char keep_flying = 'y';
           while (keep_flying == 'y')
           {
-            /* Ask for new (x, y, z, yaw). */
-            std::cout << "Please enter x location [meters]: ";
+            // moveToPosition(const Telemetry::GPSFused& desiredGPSPosition, float32_t& desiredHeight, float yawDesiredInDeg,
+            //                           int timeout, float posThresholdInM, float yawThresholdInDeg)
+            /* Ask for desired (longitude, latitude, z, yaw). */
+            std::cout << "Please enter latitude: ";
             std::cin >> xRequested;
-            std::cout << "Please enter y location [meters]: ";
+            std::cout << "Please enter longitude: ";
             std::cin >> yRequested;
-            std::cout << "Please enter z location [meters]: ";
+            std::cout << "Please enter z height [meters]: ";
             std::cin >> zRequested;
             std::cout << "Please enter yaw orientation [degrees]: ";
             std::cin >> yawRequested;
 
-            if (fabs(xRequested) <= xyzMax && fabs(yRequested) <= xyzMax && fabs(zRequested) <= xyzMax && yawRequested <= yawMax)
-            {
               /* MOVE TO NEW LOCAL POSITION */
-              ROS_INFO_STREAM("Using moveToPose to move to x = " << xRequested << ", y = " << yRequested << ", z = " << zRequested << ", yaw = " << yawRequested << " ...");
-              moveToPos(control_task, {xRequested, yRequested, zRequested, yawRequested}, posThreshInM, yawThreshInDeg);
-              ROS_INFO_STREAM("moveToPose complete!");
-            }
-            else
-            {
-              std::cout << "Invalid request received. Exceeded xyzMax=" << xyzMax << "or yawMax=" << yawMax << ".";
-            }
+            ROS_INFO_STREAM("Using moveToPose to move to latitude = " << xRequested << ", longitude = " << yRequested << ", z = " << zRequested << ", yaw = " << yawRequested << " ...");
+            moveToPos(control_task, {xRequested, yRequested, zRequested, yawRequested}, posThreshInM, yawThreshInDeg);
+            ROS_INFO_STREAM("moveToPose complete!");
 
             /* Ask if we should keep flying. */
             std::cout << "Keep flying? (y/n) ";
@@ -378,8 +375,8 @@ int main(int argc, char** argv)
         char keep_checking = 'y';
         while (keep_checking == 'y')
         {
-          std::cout << "gps_position_.latitude =" << gps_position_.latitude * C_PI / 180.0 << std::endl;
-          std::cout << "gps_position_.longitude =" << gps_position_.longitude * C_PI / 180.0 << std::endl;
+          std::cout << "gps_position_.latitude =" << gps_position_.latitude << std::endl; // * C_PI / 180.0
+          std::cout << "gps_position_.longitude =" << gps_position_.longitude << std::endl; // * C_PI / 180.0
 
           /* Ask if we should keep checking. */
           std::cout << "Keep checking? (y/n) ";
@@ -438,63 +435,18 @@ bool moveByPosOffset(FlightTaskControl& task,const JoystickCommand &offsetDesire
   return task.response.result;
 }
 
-bool moveToPos(FlightTaskControl& task,const JoystickCommand &localPosDesired,
-                     float posThresholdInM,
-                     float yawThresholdInDeg)
+bool moveToPos(FlightTaskControl& task,const JoystickCommand &offsetDesired,
+                    float posThresholdInM,
+                    float yawThresholdInDeg)
 {
-  /* Call moveByOffset, using the difference between current pose and desired pose. */
-  DJI::OSDK::float32_t x_delta = x - localPosDesired.x;
-  DJI::OSDK::float32_t y_delta = y - localPosDesired.y;
-  DJI::OSDK::float32_t z_delta = z - localPosDesired.z;
-  DJI::OSDK::float32_t yaw_delta = yaw - localPosDesired.yaw;
+  task.request.task = FlightTaskControl::Request::TASK_GPS_POSITION_AND_YAW_CONTROL;
+  task.request.joystickCommand.x = offsetDesired.x;
+  task.request.joystickCommand.y = offsetDesired.y;
+  task.request.joystickCommand.z = offsetDesired.z;
+  task.request.joystickCommand.yaw = offsetDesired.yaw;
+  task.request.posThresholdInM   = posThresholdInM;
+  task.request.yawThresholdInDeg = yawThresholdInDeg;
 
-  bool result = moveByPosOffset(task,
-                                {x_delta, y_delta, z_delta, yaw_delta},
-                                posThresholdInM,
-                                yawThresholdInDeg);
-  if (result)
-  {
-     x = localPosDesired.x;
-     y = localPosDesired.y;
-     z = localPosDesired.z;
-     yaw = localPosDesired.yaw;
-  }
-  // bool result  = moveByPosOffset(task,
-  //                 		 {x - localPosDesired.x, y - localPosDesired.y, z - localPosDesired.z, yaw - localPosDesired.yaw},
-  //                 		 posThresholdInM,
-  //                 		 yawThresholdInDeg);
-  return result;
-}
-
-void velocityAndYawRateCtrl(const JoystickCommand &offsetDesired, uint32_t timeMs)
-{
-  double originTime  = 0;
-  double currentTime = 0;
-  uint64_t elapsedTimeInMs = 0;
-  
-  SetJoystickMode joystickMode;
-  JoystickAction joystickAction;
-
-  joystickMode.request.horizontal_mode = joystickMode.request.HORIZONTAL_VELOCITY;
-  joystickMode.request.vertical_mode = joystickMode.request.VERTICAL_VELOCITY;
-  joystickMode.request.yaw_mode = joystickMode.request.YAW_RATE;
-  joystickMode.request.horizontal_coordinate = joystickMode.request.HORIZONTAL_GROUND;
-  joystickMode.request.stable_mode = joystickMode.request.STABLE_ENABLE;
-  set_joystick_mode_client.call(joystickMode);
-
-  joystickAction.request.joystickCommand.x = offsetDesired.x;
-  joystickAction.request.joystickCommand.y = offsetDesired.y;
-  joystickAction.request.joystickCommand.z = offsetDesired.z;
-  joystickAction.request.joystickCommand.yaw = offsetDesired.yaw;
-
-  originTime  = ros::Time::now().toSec();
-  currentTime = originTime;
-  elapsedTimeInMs = (currentTime - originTime)*1000;
-
-  while(elapsedTimeInMs <= timeMs)
-  {
-    currentTime = ros::Time::now().toSec();
-    elapsedTimeInMs = (currentTime - originTime) * 1000;
-    joystick_action_client.call(joystickAction);
-  }
+  task_control_client.call(task);
+  return task.response.result;
 }

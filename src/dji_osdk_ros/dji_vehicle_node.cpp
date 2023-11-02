@@ -1032,6 +1032,23 @@ bool VehicleNode::taskCtrlCallback(FlightTaskControl::Request&  request, FlightT
         }
         break;
       }
+    case FlightTaskControl::Request::TASK_GPS_POSITION_AND_YAW_CONTROL:
+      {
+        ROS_INFO_STREAM("call move GPS position offset service");
+        // moveToPosition(const Telemetry::GPSFused& desiredGPSPosition, float32_t& desiredHeight, float yawDesiredInDeg,
+        //                               int timeout, float posThresholdInM, float yawThresholdInDeg)
+        dji_osdk_ros::JoystickCommand joystickCommand;
+        joystickCommand.x   = request.joystickCommand.x;
+        joystickCommand.y   = request.joystickCommand.y;
+        joystickCommand.z   = request.joystickCommand.z;
+        joystickCommand.yaw = request.joystickCommand.yaw;
+        if (ptr_wrapper_->moveToPosition(joystickCommand, FLIGHT_CONTROL_WAIT_TIMEOUT,
+                                         request.posThresholdInM, request.yawThresholdInDeg))
+        {
+          response.result = true;
+        }
+        break;
+      }
     case FlightTaskControl::Request::TASK_TAKEOFF:
       {
         ROS_INFO_STREAM("call takeoff service");

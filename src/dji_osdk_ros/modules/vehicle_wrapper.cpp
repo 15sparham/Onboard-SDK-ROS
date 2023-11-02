@@ -1602,8 +1602,10 @@ static T_OsdkOsalHandler osalHandler = {
     return sqrt(pow(v.x, 2) + pow(v.y, 2) + pow(v.z, 2));
   }
 
-  bool VehicleWrapper::moveToPosition(const Telemetry::GPSFused& desiredGPSPosition, float32_t& desiredHeight, float yawDesiredInDeg,
-                                      int timeout, float posThresholdInM, float yawThresholdInDeg)
+  // bool VehicleWrapper::moveToPosition(const Telemetry::GPSFused& desiredGPSPosition, float32_t& desiredHeight, float yawDesiredInDeg,
+  //                                     int timeout, float posThresholdInM, float yawThresholdInDeg)
+  bool VehicleWrapper::moveToPosition(const JoystickCommand &JoystickCommand,int timeout,
+                                      float posThresholdInM,float yawThresholdInDeg)
   {
     if (!vehicle)
     {
@@ -1614,7 +1616,7 @@ static T_OsdkOsalHandler osalHandler = {
     using namespace Telemetry;
 
     int responseTimeout = 1;
-    int timeoutInMilSec = 2000; // Used to be 40000, way too long
+    int timeoutInMilSec = 40000; // Used to be 40000, way too long
     int controlFreqInHz = 50;  // Hz
     int cycleTimeInMs = 1000 / controlFreqInHz;
     int outOfControlBoundsTimeLimit = 10 * cycleTimeInMs;    // 10 cycles
@@ -1634,6 +1636,13 @@ static T_OsdkOsalHandler osalHandler = {
       return false;
     }
     // sleep(1); // Don't think we need to sleep
+
+    /* Unpack longitude, latitude, height from fake "Joystick Command". */
+    Telemetry::GPSFused desiredGPSPosition;
+    desiredGPSPosition.latitude = JoystickCommand.x;
+    desiredGPSPosition.longitude = JoystickCommand.x;
+    float32_t desiredHeight = JoystickCommand.z;
+    float yawDesiredInDeg = JoystickCommand.yaw;
 
     //! get origin relative height(from home point)of aircraft.
     Telemetry::GlobalPosition currentBroadcastGP = vehicle->broadcast->getGlobalPosition();
@@ -1658,8 +1667,18 @@ static T_OsdkOsalHandler osalHandler = {
       /******************************************/
       //! get the vector between aircraft and desired point.
 
-      Vector3f offsetRemaining = localOffsetFromGpsAndFusedHeightOffset(currentGPSPosition, desiredGPSPosition,
-                                                                    currentBroadcastGP.height, desiredHeight);
+      std::cout << "currentGPSPosition = " << currentGPSPosition.altitude << ", " << currentGPSPosition.longitude << "\n";
+      // Vector3f offsetRemaining = localOffsetFromGpsAndFusedHeightOffset(currentGPSPosition, desiredGPSPosition,
+      //                                                               currentBroadcastGP.height, desiredHeight);
+      Vector3f offsetRemaining = localOffsetFromGpsAndFusedHeightOffset(desiredGPSPosition, currentGPSPosition,
+                                                                        desiredHeight, currentBroadcastGP.height);
+      std::cout << "offsetRemaining x = " << offsetRemaining.x << ", y = " << offsetRemaining.y << ", z = " << offsetRemaining.z << "\n";
+
+      if (vectorNorm(offsetRemaining) >= 10.0)
+      {
+        std::cout << "moveToPosition Canceled: Distance to waypoint >= 10.0 meters.\n";
+        return false;
+      }
 
       Vector3f positionCommand = offsetRemaining;
       horizCommandLimit(speedFactor, positionCommand.x, positionCommand.y);
@@ -1712,6 +1731,7 @@ static T_OsdkOsalHandler osalHandler = {
   bool VehicleWrapper::moveByPositionOffset(const JoystickCommand &JoystickCommand,int timeout,
                                             float posThresholdInM,float yawThresholdInDeg)
   {
+    std::cout << "Using VehicleWrapper::moveByPositionOffset\n";
     if (!vehicle)
     {
       std::cout << "Vehicle is a null value!" << std::endl;

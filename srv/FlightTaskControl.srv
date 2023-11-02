@@ -9,6 +9,7 @@ uint8 START_MOTOR        = 7
 uint8 STOP_MOTOR         = 8
 uint8 TASK_EXIT_GO_HOME  = 12
 uint8 TASK_EXIT_LANDING  = 14
+uint8 TASK_GPS_POSITION_AND_YAW_CONTROL = 16
 uint8 TASK_FORCE_LANDING_AVOID_GROUND = 30 #/*!< confirm landing */
 uint8 TASK_FORCE_LANDING              = 31 #/*!< force landing */
 
