@@ -1668,6 +1668,7 @@ static T_OsdkOsalHandler osalHandler = {
       //! get the vector between aircraft and desired point.
 
       std::cout << "currentGPSPosition = " << currentGPSPosition.altitude << ", " << currentGPSPosition.longitude << "\n";
+      std::cout << "desiredGPSPosition = " << desiredGPSPosition.altitude << ", " << desiredGPSPosition.longitude << "\n";
       // Vector3f offsetRemaining = localOffsetFromGpsAndFusedHeightOffset(currentGPSPosition, desiredGPSPosition,
       //                                                               currentBroadcastGP.height, desiredHeight);
       Vector3f offsetRemaining = localOffsetFromGpsAndFusedHeightOffset(desiredGPSPosition, currentGPSPosition,
@@ -1791,11 +1792,15 @@ static T_OsdkOsalHandler osalHandler = {
       float yawInRad = quaternionToEulerAngle(currentQuaternion).z;
       /******************************************/
       //! get the vector between aircraft and origin point.
+      std::cout << "originGPSPosition = " << originGPSPosition.altitude << ", " << originGPSPosition.longitude << "\n";
+      std::cout << "currentGPSPosition = " << currentGPSPosition.altitude << ", " << currentGPSPosition.longitude << "\n";
+      std::cout << "desiredGPSPosition = " << desiredGPSPosition.altitude << ", " << desiredGPSPosition.longitude << "\n";
 
       Vector3f localOffset = localOffsetFromGpsAndFusedHeightOffset(currentGPSPosition, originGPSPosition,
                                                                     currentBroadcastGP.height, originHeightBaseHomepoint);
       //! get the vector between aircraft and target point.
       Vector3f offsetRemaining = vector3FSub(offsetDesired, localOffset);
+      std::cout << "offsetRemaining x = " << offsetRemaining.x << ", y = " << offsetRemaining.y << ", z = " << offsetRemaining.z << "\n";
 
       Vector3f positionCommand = offsetRemaining;
       horizCommandLimit(speedFactor, positionCommand.x, positionCommand.y);
