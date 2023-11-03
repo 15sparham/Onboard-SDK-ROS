@@ -1797,7 +1797,7 @@ static T_OsdkOsalHandler osalHandler = {
 
       Vector3f localOffset = localOffsetFromGpsAndFusedHeightOffset(currentGPSPosition, originGPSPosition,
                                                                     currentBroadcastGP.height, originHeightBaseHomepoint);
-      //! get the vector between aircraft and target point.
+      //! get the vector between aircraft and target point.sdf
       Vector3f offsetRemaining = vector3FSub(offsetDesired, localOffset);
       std::cout << "offsetRemaining x = " << offsetRemaining.x << ", y = " << offsetRemaining.y << ", z = " << offsetRemaining.z << "\n";
 
