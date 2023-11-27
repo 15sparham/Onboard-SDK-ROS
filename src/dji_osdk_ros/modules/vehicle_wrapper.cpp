@@ -1675,7 +1675,7 @@ static T_OsdkOsalHandler osalHandler = {
                                                                         desiredHeight, currentBroadcastGP.height);
       std::cout << "offsetRemaining x = " << offsetRemaining.x << ", y = " << offsetRemaining.y << ", z = " << offsetRemaining.z << "\n";
 
-      if (vectorNorm(offsetRemaining) >= 20.0)
+      if (vectorNorm(offsetRemaining) >= 10.0)
       {
         std::cout << "moveToPosition Canceled: Distance to waypoint >= 10.0 meters.\n";
         return false;

@@ -96,28 +96,35 @@ void setWaypointV2Defaults(dji_osdk_ros::WaypointV2& waypointV2)
 std::vector<dji_osdk_ros::WaypointV2> generatePolygonWaypoints(ros::NodeHandle &nh, float32_t radius, uint16_t polygonNum)
 {
   // Let's create a vector to store our waypoints in.
+  ROS_INFO("Running Shrey's customized generatePolygonWaypoints\n");
   std::vector<dji_osdk_ros::WaypointV2> waypointList;
   dji_osdk_ros::WaypointV2 startPoint;
   dji_osdk_ros::WaypointV2 waypointV2;
+  dji_osdk_ros::WaypointV2 first_wp;
 
-  startPoint.latitude  = gps_position_.latitude * C_PI / 180.0;
-  startPoint.longitude = gps_position_.longitude * C_PI / 180.0;
-  startPoint.relativeHeight = 15;
+  startPoint.latitude  = 42.294433263 * C_PI / 180.0;
+  startPoint.longitude = 83.710447602 * C_PI / 180.0;
+  first_wp.latitude = 42.29447777822 * C_PI / 180.0;
+  first_wp.longitude = 83.710405671 * C_PI / 180.0;
+  // startPoint.latitude  = gps_position_.latitude * C_PI / 180.0;
+  // startPoint.longitude = gps_position_.longitude * C_PI / 180.0;
+  startPoint.relativeHeight = 3;
   setWaypointV2Defaults(startPoint);
   waypointList.push_back(startPoint);
+  waypointList.push_back(first_wp);
 
-  // Iterative algorithm
-  for (int i = 0; i < polygonNum; i++) {
-    float32_t angle = i * 2 * M_PI / polygonNum;
-    setWaypointV2Defaults(waypointV2);
-    float32_t X = radius * cos(angle);
-    float32_t Y = radius * sin(angle);
-    waypointV2.latitude = Y/EARTH_RADIUS + startPoint.latitude;
-    waypointV2.longitude = X/(EARTH_RADIUS * cos(startPoint.latitude)) + startPoint.longitude;
-    waypointV2.relativeHeight = startPoint.relativeHeight ;
-    waypointList.push_back(waypointV2);
-  }
-  waypointList.push_back(startPoint);
+ // Iterative algorithm
+  // for (int i = 0; i < polygonNum; i++) {
+  //   float32_t angle = i * 2 * M_PI / polygonNum;
+  //   setWaypointV2Defaults(waypointV2);
+  //   float32_t X = radius * cos(angle);
+  //   float32_t Y = radius * sin(angle);
+  //   waypointV2.latitude = Y/EARTH_RADIUS + startPoint.latitude;
+  //   waypointV2.longitude = X/(EARTH_RADIUS * cos(startPoint.latitude)) + startPoint.longitude;
+  //   waypointV2.relativeHeight = startPoint.relativeHeight ;
+  //   waypointList.push_back(waypointV2);
+  // }
+ // waypointList.push_back(startPoint);
 
   return waypointList;
 }
@@ -125,7 +132,7 @@ std::vector<dji_osdk_ros::WaypointV2> generatePolygonWaypoints(ros::NodeHandle &
 bool initWaypointV2Setting(ros::NodeHandle &nh)
 {
     waypointV2_init_setting_client = nh.serviceClient<dji_osdk_ros::InitWaypointV2Setting>("dji_osdk_ros/waypointV2_initSetting");
-    initWaypointV2Setting_.request.polygonNum = 6;
+    initWaypointV2Setting_.request.polygonNum = 2;
     initWaypointV2Setting_.request.radius = 6;
     initWaypointV2Setting_.request.actionNum = 5;
 
