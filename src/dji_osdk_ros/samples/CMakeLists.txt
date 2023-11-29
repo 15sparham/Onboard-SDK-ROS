@@ -1,6 +1,6 @@
 FILE(GLOB EXAMPLES *.cc *.c *.cpp)
 
-include_directories(stereo_utility)
+include_directories(stereo_utility UTM)
 
 if(ENABLE_OPEN_CV_CONTRIB)
 add_definitions(-DUSE_OPEN_CV_CONTRIB)

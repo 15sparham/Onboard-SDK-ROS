@@ -98,6 +98,9 @@ add_message_files(
   WaypointV2MissionEventPush.msg
   WaypointV2MissionStatePush.msg
 
+  WaypointUTMArray.msg
+  WaypointUTM.msg
+
   MobileData.msg
   PayloadData.msg
   MissionWaypointAction.msg
