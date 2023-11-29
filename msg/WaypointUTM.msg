@@ -1,0 +1,9 @@
+time ts
+float64 x
+float64 y
+float64 z
+float64 vx
+float64 vy
+float64 vz
+float32 yaw
+float32 theta
