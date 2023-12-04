@@ -48,8 +48,16 @@
 #include "UTM.h"
 #include "UTM.cpp"
 
+#define PATH_PLANNING_READY
+
+#ifdef PATH_PLANNING_READY
+#include "path_planning_pkg/Waypoint.h"
+#include "path_planning_pkg/WaypointArray.h"
+#else
 #include "dji_osdk_ros/WaypointUTM.h"
 #include "dji_osdk_ros/WaypointUTMArray.h"
+#endif // PATH_PLANNING_READY 
+
 
 static int zone = 17;
 static bool southhemi = false;
@@ -65,6 +73,9 @@ dji_osdk_ros::GPSUTC time_sync_gps_utc_;
 sensor_msgs::NavSatFix gps_position_;
 sensor_msgs::NavSatFix rtk_position_;
 std_msgs::Int16 rtk_yaw_;
+#ifdef PATH_PLANNING_READY
+path_planning_pkg::WaypointArray waypointArray_;
+#endif // PATH_PLANNING_READY 
 
 DJI::OSDK::float32_t x = 0.0;   /*!< LOCAL X COORDINATE (initialized as 0.0)*/
 DJI::OSDK::float32_t y = 0.0;   /*!< LOCAL Y COORDINATE (initialized as 0.0)*/
@@ -91,10 +102,20 @@ void rtkYawSubCallback(const std_msgs::Int16::ConstPtr& rtkYaw)
   rtk_yaw_ = *rtkYaw;
 }
 
+#ifdef PATH_PLANNING_READY
+void waypointArrayCallback(const path_planning_pkg::WaypointArray::ConstPtr& waypointArray)
+{
+  waypointArray_ = *waypointArray;
+}
+#endif // PATH_PLANNING_READY 
+
 ros::Subscriber timeSyncGpsUtcSub;
 ros::Subscriber gpsPositionSub;
 ros::Subscriber rtkPositionSub;
 ros::Subscriber rtkYawSub;
+#ifdef PATH_PLANNING_READY
+ros::Subscriber waypointArraySub;
+#endif // PATH_PLANNING_READY 
 
 bool moveByPosOffset(FlightTaskControl& task,const JoystickCommand &offsetDesired,
                      float posThresholdInM = 0.8,
@@ -108,14 +129,27 @@ DJI::OSDK::float32_t xyzMax = 20;
 DJI::OSDK::float32_t yawMax = 360;
 
 // filterTime() receives time and filters waypoints coming from Path Planning
+#ifdef PATH_PLANNING_READY
+std::vector<path_planning_pkg::Waypoint> filterTime(std::vector<path_planning_pkg::Waypoint> waypointArray, int min_secs_needed = 1);
+#else
 std::vector<dji_osdk_ros::WaypointUTM> filterTime(std::vector<dji_osdk_ros::WaypointUTM> waypointArray, int min_secs_needed = 1);
+#endif // PATH_PLANNING_READY 
 
 // utmToGPSCoord() converts waypoint array's xy UTM coordinates to lat/lon coordinates (in radians)
+#ifdef PATH_PLANNING_READY
+void utmToGPSCoord(std::vector<path_planning_pkg::Waypoint> &waypointArray);
+#else
 void utmToGPSCoord(std::vector<dji_osdk_ros::WaypointUTM> &waypointArray);
+#endif // PATH_PLANNING_READY 
 
 // broadcastCoord() converts waypoint array's xy lat/lon coordinates (in radians) to UTM coordinates
 // and changes first coordinate to current location.
+#ifdef PATH_PLANNING_READY
+void broadcastCoord(std::vector<path_planning_pkg::Waypoint> &waypointArray);
+#else
 void broadcastCoord(std::vector<dji_osdk_ros::WaypointUTM> &waypointArray);
+#endif // PATH_PLANNING_READY 
+
 
 // TODO: moveToPos commands drone to move somewhere
 // void takeoffAndMoveToWaypoints(void);
@@ -129,7 +163,9 @@ int main(int argc, char** argv)
   gpsPositionSub = nh.subscribe("dji_osdk_ros/gps_position", 10, &gpsPositionSubCallback);
   rtkPositionSub = nh.subscribe("dji_osdk_ros/rtk_position", 10, &rtkPositionSubCallback);
   rtkYawSub = nh.subscribe("dji_osdk_ros/rtk_yaw", 10, &rtkYawSubCallback);
-    
+#ifdef PATH_PLANNING_READY
+  waypointArraySub = nh.subscribe("UAV0_path", 10, &waypointArrayCallback);
+#endif // PATH_PLANNING_READY 
 
   ros::Duration(1).sleep();
   ros::AsyncSpinner spinner(1);
@@ -450,20 +486,31 @@ int main(int argc, char** argv)
       }
     case 'f':
       {
+#ifdef PATH_PLANNING_READY
+        path_planning_pkg::Waypoint waypointUTM;
+        path_planning_pkg::WaypointArray waypointUTMArray;
+#else
         dji_osdk_ros::WaypointUTM waypointUTM;
         dji_osdk_ros::WaypointUTMArray waypointUTMArray;
+#endif
 
         char option2 = 'a';
         std::cout << "| Available commands:                                                      |" << std::endl;
         std::cout << "| [a] Manually insert waypoints                                            |" << std::endl;
         std::cout << "| [b] Use predefined waypoints around static MAir Location                 |" << std::endl;
         std::cout << "| [c] Use predefined waypoints around current GPS+RTK Location             |" << std::endl;
-        std::cout << "| [d] Manually insert waypoints + action                                   |" << std::endl;
-        std::cout << "| [e] Use predefined waypoints around static MAir Location + action        |" << std::endl;
-        std::cout << "| [f] Use predefined waypoints around current GPS+RTK Location + action    |" << std::endl;
+#ifdef PATH_PLANNING_READY
+        std::cout << "| [d] Listen to WaypointUTMArray topic for array of waypoints              |" << std::endl;
+#endif // PATH_PLANNING_READY  
+        std::cout << "| [f] Manually insert waypoints + action                                   |" << std::endl;
+        std::cout << "| [g] Use predefined waypoints around static MAir Location + action        |" << std::endl;
+        std::cout << "| [h] Use predefined waypoints around current GPS+RTK Location + action    |" << std::endl;
+#ifdef PATH_PLANNING_READY
+        std::cout << "| [i] Listen to WaypointUTMArray topic for array of waypoints + action     |" << std::endl;
+#endif // PATH_PLANNING_READY 
         std::cin >> option2;
 
-        if (option2 == 'a' || option2 == 'd')
+        if (option2 == 'a' || option2 == 'f')
         {
           while (keep_checking == 'y')
           {
@@ -481,7 +528,7 @@ int main(int argc, char** argv)
             std::cout << "Please enter time [nanoseconds]: ";
             std::cin >> waypointUTM.ts.nsec;
 
-            waypointUTMArray.waypoints.push_back(waypointUTM);
+            waypointUTMArray.waypoint_list.push_back(waypointUTM);
 
             /* Ask if we should keep checking. */
             std::cout << "Keep inserting UTM waypoints? (y/n) ";
@@ -544,27 +591,39 @@ int main(int argc, char** argv)
             waypointUTM.yaw = 0;
             waypointUTM.ts.sec = time_sync_gps_utc_.stamp.sec + (i*5 + 10); // Add i*5 + 10 seconds to the timestamp
             waypointUTM.ts.nsec = time_sync_gps_utc_.stamp.nsec;
-            waypointUTMArray.waypoints.push_back(waypointUTM);
+            waypointUTMArray.waypoint_list.push_back(waypointUTM);
           }
         }
+#ifdef PATH_PLANNING_READY
+        else if (option2 == 'd' || option2 == 'i')
+        {
+          waypointUTMArray = waypointArray_;
+          std::cout << "Received waypointArray" << std::endl;
+        }
+#endif // PATH_PLANNING_READY
         else
         {
           break;
         }
 
         // Check if filterTime() works
-        std::cout << "Number of UTM waypoints inserted = " << waypointUTMArray.waypoints.size() << std::endl;
-        std::vector<dji_osdk_ros::WaypointUTM> waypointVector = filterTime(waypointUTMArray.waypoints);
+        std::cout << "Number of UTM waypoints inserted = " << waypointUTMArray.waypoint_list.size() << std::endl;
+#ifdef PATH_PLANNING_READY
+        std::vector<path_planning_pkg::Waypoint> waypointVector = filterTime(waypointUTMArray.waypoint_list);
+        path_planning_pkg::WaypointArray waypointUTMArray2;
+#else
+        std::vector<dji_osdk_ros::WaypointUTM> waypointVector = filterTime(waypointUTMArray.waypoint_list);
         dji_osdk_ros::WaypointUTMArray waypointUTMArray2;
-        waypointUTMArray2.waypoints = waypointVector;
-        std::cout << "Number of UTM waypoints after filterTime() is = " << waypointUTMArray2.waypoints.size() << std::endl;
+#endif // PATH_PLANNING_READY
+        waypointUTMArray2.waypoint_list = waypointVector;
+        std::cout << "Number of UTM waypoints after filterTime() is = " << waypointUTMArray2.waypoint_list.size() << std::endl;
         
         // Take filtered waypoints and convert them from UTM to GPS+RTK
-        utmToGPSCoord(waypointUTMArray2.waypoints);
+        utmToGPSCoord(waypointUTMArray2.waypoint_list);
 
-        broadcastCoord(waypointUTMArray2.waypoints);
+        broadcastCoord(waypointUTMArray2.waypoint_list);
 
-        if (option2 == 'a' || option2 == 'b' || option2 == 'c')
+        if (option2 == 'a' || option2 == 'b' || option2 == 'c' || option2 == 'd')
         {
           break;
         }
@@ -617,7 +676,11 @@ int main(int argc, char** argv)
           std::cout << "Please enter yaw threshold [degrees]: ";
           std::cin >> yawThreshInDeg;
           /* Ask after each iteration if drone should keep flying and ask for another waypoint. */
-          for (dji_osdk_ros::WaypointUTM waypoint : waypointUTMArray2.waypoints)
+#ifdef PATH_PLANNING_READY
+          for (path_planning_pkg::Waypoint waypoint : waypointUTMArray2.waypoint_list)
+#else
+          for (dji_osdk_ros::WaypointUTM waypoint : waypointUTMArray2.waypoint_list)
+#endif // PATH_PLANNING_READY
           {
             ROS_INFO_STREAM("Using moveToPose to move to latitude = " << waypoint.x << ", longitude = " << waypoint.y << ", z = " << waypoint.z << ", yaw = " << waypoint.yaw << " ...");
             moveToPos(control_task, {waypoint.x, waypoint.y, waypoint.z, waypoint.yaw}, posThreshInM, yawThreshInDeg);
@@ -706,6 +769,26 @@ bool moveToPos(FlightTaskControl& task,const JoystickCommand &offsetDesired,
 }
 
 // filterTime() receives time and filters waypoints coming from Path Planning
+#ifdef PATH_PLANNING_READY
+std::vector<path_planning_pkg::Waypoint> filterTime(std::vector<path_planning_pkg::Waypoint> waypointVector, int min_secs_needed)
+{
+  std::vector<path_planning_pkg::Waypoint> waypointVectorOut;
+  // For each element in the input array...
+  for (path_planning_pkg::Waypoint waypoint : waypointVector)
+  {
+    // If current time + min_secs_needed is less than waypoint time, add it to the output array list.
+    if (time_sync_gps_utc_.stamp.sec + min_secs_needed < waypoint.ts.sec)
+    {
+      waypointVectorOut.push_back(waypoint);
+    }
+    else if (time_sync_gps_utc_.stamp.sec + min_secs_needed == waypoint.ts.sec && time_sync_gps_utc_.stamp.nsec < waypoint.ts.nsec)
+    {
+      waypointVectorOut.push_back(waypoint);
+    }
+  }
+  return waypointVectorOut;
+}
+#else
 std::vector<dji_osdk_ros::WaypointUTM> filterTime(std::vector<dji_osdk_ros::WaypointUTM> waypointVector, int min_secs_needed)
 {
   std::vector<dji_osdk_ros::WaypointUTM> waypointVectorOut;
@@ -724,8 +807,28 @@ std::vector<dji_osdk_ros::WaypointUTM> filterTime(std::vector<dji_osdk_ros::Wayp
   }
   return waypointVectorOut;
 }
+#endif // PATH_PLANNING_READY
 
 // utmToGPSCoord() converts waypoint array's xy UTM coordinates to lat/lon coordinates (in radians)
+#ifdef PATH_PLANNING_READY
+void utmToGPSCoord(std::vector<path_planning_pkg::Waypoint> &waypointArray)
+{
+  for (int i = 0; i < waypointArray.size(); i++)
+  {
+    FLOAT x = waypointArray[i].x;
+    FLOAT y = waypointArray[i].y;
+
+    std::cout << "UTM coordinate (x, y): " << setprecision(15) << x << ", " << y << std::endl;
+
+    UTMXYToLatLon(x, y, zone, southhemi, waypointArray[i].x, waypointArray[i].y);
+    // UTMXYToLatLon(x, y, zone, southhemi, lat, lon);
+
+    std::cout << "Converted GPS+RTK coordinate (lat, lon): " << RadToDeg(waypointArray[i].x) << ", " << RadToDeg(waypointArray[i].y) << std::endl << std::endl;
+    // std::cout << "Converted GPS+RTK coordinate: " << RadToDeg(lat) << ", " << RadToDeg(lon) << std::endl;
+
+  }
+}
+#else
 void utmToGPSCoord(std::vector<dji_osdk_ros::WaypointUTM> &waypointArray)
 {
   for (int i = 0; i < waypointArray.size(); i++)
@@ -743,9 +846,39 @@ void utmToGPSCoord(std::vector<dji_osdk_ros::WaypointUTM> &waypointArray)
 
   }
 }
+#endif // PATH_PLANNING_READY
 
 // broadcastCoord() converts waypoint array's xy lat/lon coordinates (in radians) to UTM coordinates
 // and changes first coordinate to current location.
+#ifdef PATH_PLANNING_READY
+void broadcastCoord(std::vector<path_planning_pkg::Waypoint> &waypointArray)
+{
+  std::vector<path_planning_pkg::Waypoint> waypointArrayOut;
+  for (int i = 0; i < waypointArray.size(); i++)
+  {
+    path_planning_pkg::Waypoint waypoint = waypointArray[i];
+
+    if (i == 0)
+    {
+      std::cout << "Changing first waypoint to use current RTK position..." << std::endl;
+      waypoint.x = DegToRad(rtk_position_.latitude);
+      waypoint.y = DegToRad(rtk_position_.longitude);
+      waypoint.z = rtk_position_.altitude;
+    }
+
+    FLOAT lat = waypoint.x;
+    FLOAT lon = waypoint.y;
+
+    std::cout << "GPS+RTK coordinate (lat, lon): " << setprecision(15) << RadToDeg(lat) << ", " << RadToDeg(lon) << std::endl;
+
+    // LatLonToUTMXY (FLOAT lat, FLOAT lon, int zone, FLOAT& x, FLOAT& y)
+    LatLonToUTMXY(lat, lon, zone, waypoint.x, waypoint.y);
+    std::cout << "Converted UTM coordinate: " << waypoint.x << ", " << waypoint.y << std::endl << std::endl;
+
+    waypointArrayOut.push_back(waypoint);
+  }
+}
+#else
 void broadcastCoord(std::vector<dji_osdk_ros::WaypointUTM> &waypointArray)
 {
   std::vector<dji_osdk_ros::WaypointUTM> waypointArrayOut;
@@ -773,3 +906,4 @@ void broadcastCoord(std::vector<dji_osdk_ros::WaypointUTM> &waypointArray)
     waypointArrayOut.push_back(waypoint);
   }
 }
+#endif // PATH_PLANNING_READY

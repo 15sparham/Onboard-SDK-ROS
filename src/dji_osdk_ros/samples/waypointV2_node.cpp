@@ -134,7 +134,7 @@ bool initWaypointV2Setting(ros::NodeHandle &nh)
     waypointV2_init_setting_client = nh.serviceClient<dji_osdk_ros::InitWaypointV2Setting>("dji_osdk_ros/waypointV2_initSetting");
     initWaypointV2Setting_.request.polygonNum = 2;
     initWaypointV2Setting_.request.radius = 6;
-    initWaypointV2Setting_.request.actionNum = 5;
+    initWaypointV2Setting_.request.actionNum = 1;
 
     /*! Generate actions*/
     generateWaypointV2Actions(nh, initWaypointV2Setting_.request.actionNum);
@@ -150,7 +150,7 @@ bool initWaypointV2Setting(ros::NodeHandle &nh)
     waypointV2_init_setting_client.call(initWaypointV2Setting_);
     if (initWaypointV2Setting_.response.result)
     {
-      ROS_INFO("Init mission setting successfully!\n");
+      ROS_INFO("Init missionfr setting successfully!\n");
     }
     else
     {

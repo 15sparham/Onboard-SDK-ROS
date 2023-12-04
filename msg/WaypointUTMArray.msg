@@ -1,1 +1,1 @@
-WaypointUTM[] waypoints
+WaypointUTM[] waypoint_list
