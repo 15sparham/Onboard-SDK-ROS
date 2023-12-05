@@ -502,15 +502,15 @@ int main(int argc, char** argv)
 #ifdef PATH_PLANNING_READY
         std::cout << "| [d] Listen to WaypointUTMArray topic for array of waypoints              |" << std::endl;
 #endif // PATH_PLANNING_READY  
-        std::cout << "| [f] Manually insert waypoints + action                                   |" << std::endl;
-        std::cout << "| [g] Use predefined waypoints around static MAir Location + action        |" << std::endl;
-        std::cout << "| [h] Use predefined waypoints around current GPS+RTK Location + action    |" << std::endl;
+        std::cout << "| [e] Manually insert waypoints + action                                   |" << std::endl;
+        std::cout << "| [f] Use predefined waypoints around static MAir Location + action        |" << std::endl;
+        std::cout << "| [g] Use predefined waypoints around current GPS+RTK Location + action    |" << std::endl;
 #ifdef PATH_PLANNING_READY
-        std::cout << "| [i] Listen to WaypointUTMArray topic for array of waypoints + action     |" << std::endl;
+        std::cout << "| [h] Listen to WaypointUTMArray topic for array of waypoints + action     |" << std::endl;
 #endif // PATH_PLANNING_READY 
         std::cin >> option2;
 
-        if (option2 == 'a' || option2 == 'f')
+        if (option2 == 'a' || option2 == 'e')
         {
           while (keep_checking == 'y')
           {
@@ -535,9 +535,9 @@ int main(int argc, char** argv)
             std::cin >> keep_checking;
           }
         }
-        else if (option2 == 'b' || option2 == 'c' || option2 == 'e' || option2 == 'f')
+        else if (option2 == 'b' || option2 == 'c' || option2 == 'f' || option2 == 'g')
         {
-          if (option2 == 'b' || option2 == 'e')
+          if (option2 == 'b' || option2 == 'f')
           {
             // Predefined UTM waypoint used in option b
             waypointUTM.x = 276554.086;
@@ -595,7 +595,7 @@ int main(int argc, char** argv)
           }
         }
 #ifdef PATH_PLANNING_READY
-        else if (option2 == 'd' || option2 == 'i')
+        else if (option2 == 'd' || option2 == 'h')
         {
           waypointUTMArray = waypointArray_;
           std::cout << "Received waypointArray" << std::endl;
